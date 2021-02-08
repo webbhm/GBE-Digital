@@ -37,3 +37,6 @@ Pi Zero Configuration:
 * Enable VNC, SPI, I2C
 * Add software package usbmount (for easy access to the flash drive)
 * For deployment, the GUI can/should be turned off.
+
+## References:
+* [systemd services](https://domoticproject.com/creating-raspberry-pi-service/)
