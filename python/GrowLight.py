@@ -4,29 +4,29 @@ Manages PWM via the GPIO pins
 Experiment settings are managed through the Light_Setting import
 Author: Howard Webb
 Date: 12/20/2020
+3/16/2021 modified to work with pi-blaster
+  no longer need to have GrowLight running 7/24 as service since pi-blaster is a service
+  this really just becomes a utility wrapper of pi-blaster
 '''
 
-import RPi.GPIO as GPIO
+#import RPi.GPIO as GPIO
 from time import sleep
-from Light_Setting import *
+from PWM_Util import map
+import os
+from exp import exp
 
 # Assignments of Raspberry Pi pins to color chanels
-# There is no significance to which pins were chosen
-pin_R = 32 # Red
-pin_B = 24 # Blue
-pin_G = 26 # Green
-pin_W = 22  # White
+# BCM numbering
+pin_R = 12 # Red
+pin_B = 20 # Blue
+pin_G = 16 # Green
+pin_W = 21  # White
+
 state = False
+
 
 # Values are dimming.  0 = Full power, 100 = off, going from max power up to 100
 OFF = 100
-
-
-# Maximum (minimum PWM) setting for LED safety
-# Do not change at risk of burning out LEDs
-
-# PWM frequency - 100 cycles/second
-FREQUENCY = 100
 
 # Range of the visible spectrum - used for one of the tests
 SPEC_LOW = 380
@@ -38,51 +38,17 @@ class GrowLight(object):
     '''
 
     def __init__(self):
-        # standard setup of the GPIO pins
-        GPIO.setwarnings(False)
-        GPIO.setmode(GPIO.BOARD)
-
-        # Set up the pins for each chanel
-        # Set pins for output
-        GPIO.setup(pin_R, GPIO.OUT)
-        GPIO.setup(pin_G, GPIO.OUT)
-        GPIO.setup(pin_B, GPIO.OUT)
-        GPIO.setup(pin_W, GPIO.OUT)
-        # Pull the pins low
-        GPIO.output(pin_R, GPIO.LOW)
-        GPIO.output(pin_G, GPIO.LOW)
-        GPIO.output(pin_B, GPIO.LOW)
-        GPIO.output(pin_W, GPIO.LOW)
-        # Set for PWM and ferquency for each chanel
-        self.pwm_R = GPIO.PWM(pin_R, FREQUENCY)
-        self.pwm_G = GPIO.PWM(pin_G, FREQUENCY)
-        self.pwm_B = GPIO.PWM(pin_B, FREQUENCY)
-        self.pwm_W = GPIO.PWM(pin_W, FREQUENCY)
-
-        self.pwm_R.start(0)
-        self.pwm_G.start(0)
-        self.pwm_B.start(0)
-        self.pwm_W.start(0)
-        # Turn all lights off
-        #print("off")
-        self.set_lights(OFF, OFF, OFF, OFF)
-
-        # setup experiment values
-        self.R = args["setting"]["R"]
-        self.G = args["setting"]["G"]
-        self.B = args["setting"]["B"]
-        self.W = args["setting"]["W"]
-        self.on_func = args["on_func"]
-        self.off_func = args["off_func"]
+        
         # maximum safe settings
         self.R_MAX = 0
         self.G_MAX = 50
         self.B_MAX = 5
         self.W_MAX = 0        
         
-    
+        self.set_lights(OFF, OFF, OFF, OFF)
             
     def set_lights(self, r, g, b, w=OFF):
+        # for legacy that works with 0-100
         # change the duty cycle of the RGBW light
         #print("Set", r, g, b, w)
         # don't accept setting with numeric value lower than MAX
@@ -90,50 +56,101 @@ class GrowLight(object):
             r = self.R_MAX
         if g < self.G_MAX:
             g = self.G_MAX
-        if b < selfB_MAX:
+        if b < self.B_MAX:
             b = self.B_MAX
         if w < self.W_MAX:
             w = self.W_MAX
-        self.pwm_R.ChangeDutyCycle(r)
-        self.pwm_G.ChangeDutyCycle(g)
-        self.pwm_B.ChangeDutyCycle(b)
-        self.pwm_W.ChangeDutyCycle(w)    
-
+        #print("Safe Set", r, g, b, w)
+        # PWM is normally 0-100, but pi-blaster uses 0-1
+        r = round(r/100, 3)
+        g = round(g/100, 3)
+        b = round(b/100, 3)
+        w = round(w/100, 3)
+        self.set_pwm(r, g, b, w)
+        cmd = 'echo "12={} 16={} 20={} 21={}" > /dev/pi-blaster'.format(r, g, b, w)
+        print(cmd)
+        os.system(cmd)        
+        
+    def set_pwm(self, r, g, b, w=1):
+        if (r > 1) or (g > 1) or (b > 1) or (w > 1):
+            print("Invalid value", r, g, b, w)
+            return
+        cmd = 'echo "12={} 16={} 20={} 21={}" > /dev/pi-blaster'.format(r, g, b, w)
+        print(cmd)
+        os.system(cmd)        
         
     def end(self):
         # turn off all the leds
-        self.set_lights(OFF, OFF, OFF, OFF)
-        self.pwm_R.stop()
-        self.pwm_G.stop()
-        self.pwm_B.stop()
-        self.pwm_W.stop()
-        GPIO.cleanup()
+        #self.set_lights(OFF, OFF, OFF, OFF)
+        #self.pwm_R.stop()
+        #self.pwm_G.stop()
+        #self.pwm_B.stop()
+        #self.pwm_W.stop()
+        #GPIO.cleanup()
+        pass
         
     def on(self):
-        self.set_lights(50, OFF, 50)
+        # call on action from experiment settings
+        self.switch_light("on")
+        
+    def off(self):
+        # call off action from experiment settings
+        self.switch_light("off")
+        
+    def camera(self):
+        # setting for camera
+        self.set_pwm(1, 1, 1, 0)
+        
+        
+    def switch_light(self, action):
+        # get exp info and perform
+        setting = "setting"
+        function = "function"
+        lights = exp["phases"][exp["current_phase"]]["lights"][action]
+        if setting in lights:
+            # have a light setting
+            ls = lights[setting]
+            R = ls["R"]
+            G = ls["G"]
+            B = ls["B"]
+            W = ls["W"]
+            self.set_lights(R, G, B, W)
+        elif function in lights:
+            #have dynamic function
+            mod = lights[function]["module"]
+            print("Module:", mod)
+            module = __import__(mod)
+            cls = lights[function]["class"]
+            print("Class:", cls)
+            class_ = getattr(module, cls)
+            # build object and pass in Grow_Light
+            instance = class_(self._light)            
     
-    def off():    
-        self.end()        
-    
-def map(value, R1_Low, R1_High, R2_Low, R2_High):
-    # map one range of numbers to another range
-    # Used for RGB to PWM conversion (0-255, 100-0)
-    # Used for Specturm to RGB (0-1, 0-255)
-    y = (value-R1_Low)/(R1_High-R1_Low)*(R2_High-R2_Low) + R2_Low
-    return y
-
+  
 def test():
     gl = GrowLight()
+    print("On")
     gl.on()
     sleep(10)
+    print("Red")
+    gl.set_lights(50, OFF, OFF)
+    sleep(10)
+    print("Green")
+    gl.set_lights(OFF, 50, OFF)
+    sleep(10)
+    print("Blue")
+    gl.set_lights(OFF, OFF, 50)
+    sleep(10)
+    print("White")
+    gl.set_lights(OFF, OFF, OFF, 50)
+    sleep(10)
+    #print("Red")
+    #gl.set_lights(50, OFF, OFF)
+    #sleep(100 )    
+    print("Off")
+    
     gl.off()
+    sleep(2)
 
 if __name__ == "__main__":
         test()
-        #test2()
-        #spectrum()
-        #kelvin()
-        #sun()
-        #switch_test()
-        turn_on()
-        #test3()

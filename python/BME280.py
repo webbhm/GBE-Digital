@@ -32,6 +32,7 @@ class BME280(object):
     def __init__(self):
         self._bus = smbus.SMBus(1) # Rev 2 Pi, Pi 2 & Pi 3 uses bus 1
                      # Rev 1 Pi uses bus 0
+        self._temp, self._pressure, self._humidity = self.getData()
 
     def getShort(self, data, index):
       # return two bytes from data as a signed 16-bit value
@@ -172,6 +173,15 @@ class BME280(object):
         #print(p1, p2, p3)
         return pressure + elev/10
         return round(pressure + ((pressure * 9.80665 * elev)/(287 *  (273 + temp + (elev/400)))), 2)
+    
+    def getTemp(self):
+        return self._temp
+    
+    def getPressure(self):
+        return self._pressure
+    
+    def getHumidity(self):
+        return self._humidity
         
 
 def main():

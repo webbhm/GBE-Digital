@@ -1,0 +1,1 @@
+default_display={'title': 'Dashboard', 'module': 'Display_Dashboard', 'class': 'Dashboard', 'config': '_column_list'}

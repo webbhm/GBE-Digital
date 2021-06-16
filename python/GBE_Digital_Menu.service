@@ -1,0 +1,29 @@
+# Make the Menu a service - run on startup
+# Copy this file with:
+# sudo cp /home/pi/python/GBE_Digital_Menu.service /lib/systemd/system/
+# Start with:
+# sudo systemctl start GBE_Digital_Menu.service
+# Check with:
+# sudo systemctl status GBE_Digital_Menu.service
+# Stop with:
+# sudo systemctl stop GBE_Digital_Menu.service
+
+# Set to start on boot
+# sudo systemctl enable GBE_Digital_Menu.service
+# Check this install with:
+# sudo service GBE_Digital_Menu status/start/stop
+
+
+[Unit]
+Description=GBE Menu Service
+ 
+[Service]
+ExecStart=/usr/bin/python3 /home/pi/python/Display_Manager.py
+WorkingDirectory=/home/pi/python/
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=pi
+ 
+[Install]
+WantedBy=multi-user.target
